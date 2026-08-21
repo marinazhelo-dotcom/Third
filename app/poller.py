@@ -9,19 +9,22 @@ from app.circuit_breaker import CircuitBreaker
 from app.config import AppConfig, SourceConfig
 from app.db import SessionLocal
 from app.models import DB_SOURCE_MODELS
+from app.publisher import Publisher
 from app.sources.base import SourceProvider
 from app.sources.factory import get_source
+from shared.events import ROUTING_KEYS, make_reading_event
 
 logger = logging.getLogger(__name__)
 # __name__ is the name of the module (app.poller)
 
 
 class Poller:
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, rabbitmq_url: str | None = None):
         self.config = config
         self._client = httpx.AsyncClient(timeout=10.0)
         self._breakers: dict[str, CircuitBreaker] = {}
         self._tasks: list[asyncio.Task] = []
+        self._publisher = Publisher(rabbitmq_url) if rabbitmq_url else None
         # retry is a decorator that will retry the function if it fails
         # _retry is a callable that takes a function and returns another callable, 
         # which when awaited returns a list. 
@@ -45,6 +48,12 @@ class Poller:
         return self._breakers
 
     async def start(self) -> None:
+        if self._publisher is not None:
+            try:
+                await self._publisher.connect()
+                logger.info("Poller connected to RabbitMQ")
+            except Exception as exc:
+                logger.warning("Poller could not connect to RabbitMQ: %s", exc)
         for source in self.config.sources:
             task = asyncio.create_task( # sends to the event loop
                 # _run_source will be executed when the event loop next has a turn
@@ -59,6 +68,8 @@ class Poller:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         await self._client.aclose()
+        if self._publisher is not None:
+            await self._publisher.close()
         logger.info("Poller stopped")
 
     async def _run_source(self, source: SourceConfig) -> None:
@@ -89,6 +100,19 @@ class Poller:
         except Exception as exc:
             breaker.record_failure()
             logger.warning("Poller %s failed: %s", source.name, exc)
+            return
+        await self._publish_readings(source.type, readings)
+
+    async def _publish_readings(self, source_type: str, readings: list) -> None:
+        if self._publisher is None or not readings:
+            return
+        routing_key = ROUTING_KEYS.get(source_type, f"{source_type}.reading")
+        for reading in readings:
+            event = make_reading_event(source_type, reading.model_dump(exclude_none=True))
+            try:
+                await self._publisher.publish(event, routing_key)
+            except Exception as exc:
+                logger.warning("Failed to publish %s event: %s", source_type, exc)
 
     async def _persist(self, model_cls: type, readings: list) -> None:
         async with SessionLocal() as session:

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     config_path: Path = Path("config.yaml")
     database_url: str = "sqlite+aiosqlite:///./third.db"
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
 
 
 @lru_cache # Settings are initialized only once

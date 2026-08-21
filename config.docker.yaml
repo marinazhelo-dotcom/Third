@@ -1,0 +1,25 @@
+breaker:
+  failure_threshold: 5
+  cooldown_seconds: 30.0
+  half_open_max_probes: 3
+
+retry:
+  max_attempts: 3
+  base_delay_seconds: 1.0
+
+sources:
+  - name: iot
+    type: iot
+    url: http://mock:9000/iot
+    interval_seconds: 5
+    mock: true
+  - name: weather
+    type: weather
+    url: http://mock:9000/weather
+    interval_seconds: 60
+    mock: true
+  - name: market
+    type: market
+    url: http://mock:9000/market
+    interval_seconds: 30
+    mock: true

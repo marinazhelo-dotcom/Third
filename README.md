@@ -74,3 +74,29 @@ Notes:
 - To point at a different config or database, set `THIRD_CONFIG_PATH` / `THIRD_DATABASE_URL`
   environment variables.
 - Tests: `uv run pytest`
+
+## How to run (Stage 2)
+
+Runs everything (mock APIs, ingest engine, RabbitMQ, Redis, PostgreSQL, Telemetry service)
+in containers:
+
+```bash
+docker compose up --build -d
+```
+
+Flow: ingest polls the mock APIs → stores to SQLite → publishes events to RabbitMQ →
+the Telemetry service consumes them → persists to PostgreSQL and caches latest readings in Redis.
+
+```bash
+# Ingest engine (SQLite-backed)
+curl 127.0.0.1:8000/readings/iot
+
+# Telemetry service (PostgreSQL + Redis)
+curl 127.0.0.1:8010/health
+curl 127.0.0.1:8010/devices
+curl 127.0.0.1:8010/devices/solar-1/latest          # from Redis cache
+curl 127.0.0.1:8010/devices/solar-1/readings        # from PostgreSQL
+curl 127.0.0.1:8010/devices/solar-1/stats?window_seconds=3600  # avg/min/max aggregates
+```
+
+Stop it: `docker compose down`

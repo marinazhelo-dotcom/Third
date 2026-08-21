@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="Mock Third-Party APIs")
 
-FAILING: set[str] = {}
+FAILING: set[str] = set()
 
 
 def _now() -> str:

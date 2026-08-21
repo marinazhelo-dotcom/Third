@@ -8,11 +8,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.circuit_breaker import CircuitBreaker
 from app.config import AppConfig, SourceConfig
 from app.db import SessionLocal
-from app.models import SOURCE_MODELS
+from app.models import DB_SOURCE_MODELS
 from app.sources.base import SourceProvider
 from app.sources.factory import get_source
 
 logger = logging.getLogger(__name__)
+# __name__ is the name of the module (app.poller)
 
 
 class Poller:
@@ -21,6 +22,9 @@ class Poller:
         self._client = httpx.AsyncClient(timeout=10.0)
         self._breakers: dict[str, CircuitBreaker] = {}
         self._tasks: list[asyncio.Task] = []
+        # retry is a decorator that will retry the function if it fails
+        # _retry is a callable that takes a function and returns another callable, 
+        # which when awaited returns a list. 
         self._retry: Callable[..., Callable[..., Awaitable[list]]] = retry(
             stop=stop_after_attempt(config.retry.max_attempts),
             wait=wait_exponential(multiplier=config.retry.base_delay_seconds, max=10),
@@ -42,7 +46,9 @@ class Poller:
 
     async def start(self) -> None:
         for source in self.config.sources:
-            task = asyncio.create_task(
+            task = asyncio.create_task( # sends to the event loop
+                # _run_source will be executed when the event loop next has a turn
+                # (next "await" after this function returns)
                 self._run_source(source), name=f"poll-{source.name}"
             )
             self._tasks.append(task)
@@ -58,7 +64,7 @@ class Poller:
     async def _run_source(self, source: SourceConfig) -> None:
         provider = get_source(source, self._client)
         breaker = self._breakers[source.name]
-        model_cls = SOURCE_MODELS[source.type]
+        model_cls = DB_SOURCE_MODELS[source.type]
         logger.info("Poller %s started (every %.1fs)", source.name, source.interval_seconds)
 
         while True:
@@ -70,7 +76,7 @@ class Poller:
         source: SourceConfig,
         provider: SourceProvider,
         breaker: CircuitBreaker,
-        model_cls: type,
+        model_cls: type, # name of the model class
     ) -> None:
         if not breaker.allow_request():
             logger.debug("Poller %s: circuit open, skipping", source.name)
@@ -87,5 +93,8 @@ class Poller:
     async def _persist(self, model_cls: type, readings: list) -> None:
         async with SessionLocal() as session:
             for reading in readings:
+                # model_dump() converts the Pydantic model to a dictionary
+                # ** unpacks the dictionary into keyword arguments
+                # model_cls(dict) creates a new db object
                 session.add(model_cls(**reading.model_dump()))
             await session.commit()

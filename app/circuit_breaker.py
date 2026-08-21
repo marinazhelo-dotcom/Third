@@ -14,12 +14,18 @@ class CircuitOpenError(Exception):
 
 
 class CircuitBreaker:
+    ''' The Circuit Breaker pattern helps to prevent a cascading failure of a system.
+    The idea: a remote service can fail, and hammering it while it's down just makes things worse
+    so you wrap calls to it in a state machine that stops sending requests once enough failures happen,
+    gives the service time to recover, then cautiously re-allows traffic.
+    '''
     def __init__(
         self,
         failure_threshold: int = 5,
         cooldown_seconds: float = 30.0,
         half_open_max_probes: int = 3,
         now: Callable[[], float] = time.monotonic,
+        # Callable[[], float] -> [] types of arguments, float -> return type
     ):
         self.failure_threshold = failure_threshold
         self.cooldown_seconds = cooldown_seconds
@@ -39,6 +45,12 @@ class CircuitBreaker:
         return self._failure_count
 
     def allow_request(self) -> bool:
+        '''
+        Checks if the circuit breaker allows a request to be made.
+        If the circuit is open - dont
+        If the circuit is closed - go
+        If the circuit is half open and it's time to try again - go
+        '''
         if self._state is CircuitState.OPEN:
             if self._now() >= self._opened_at + self.cooldown_seconds:
                 self._state = CircuitState.HALF_OPEN
@@ -56,6 +68,12 @@ class CircuitBreaker:
         self._close()
 
     def record_failure(self) -> None:
+        '''
+        Records a failed request.
+        If the circuit was half open, it will open the circuit again.
+        If the circuit was closed, it will increment the failure count.
+        and when failure count is greater than the failure threshold, it will open the circuit.
+        '''
         if self._state is CircuitState.HALF_OPEN:
             self._open()
             return

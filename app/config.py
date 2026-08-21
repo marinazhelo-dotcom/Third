@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path # system path, not url :)
 
 import yaml
 from pydantic import BaseModel, Field
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./third.db"
 
 
-@lru_cache
+@lru_cache # Settings are initialized only once
 def get_settings() -> Settings:
     return Settings()
 

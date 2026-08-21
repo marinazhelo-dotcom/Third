@@ -4,7 +4,7 @@ import respx
 from sqlalchemy import select
 
 from app.config import AppConfig, BreakerConfig, RetryConfig, SourceConfig
-from app.models import IoTReading, SOURCE_MODELS
+from app.models import IoTReading, DB_SOURCE_MODELS
 from app.poller import Poller
 from app.sources.factory import get_source
 
@@ -31,7 +31,7 @@ async def test_poll_once_stores_readings(monkeypatch, session_factory):
     source = poller.config.sources[0]
     provider = get_source(source, poller._client)
     breaker = poller.breaker_for("iot")
-    model_cls = SOURCE_MODELS["iot"]
+    model_cls = DB_SOURCE_MODELS["iot"]
 
     with respx.mock:
         respx.get("http://iot.test/data").mock(
@@ -66,7 +66,7 @@ async def test_poll_once_retries_then_trips_breaker(monkeypatch, session_factory
     source = config.sources[0]
     provider = get_source(source, poller._client)
     breaker = poller.breaker_for("iot")
-    model_cls = SOURCE_MODELS["iot"]
+    model_cls = DB_SOURCE_MODELS["iot"]
 
     with respx.mock:
         respx.get("http://iot.test/data").mock(return_value=httpx.Response(500))
@@ -90,7 +90,7 @@ async def test_poll_once_skips_when_open(monkeypatch, session_factory):
     source = config.sources[0]
     provider = get_source(source, poller._client)
     breaker = poller.breaker_for("iot")
-    model_cls = SOURCE_MODELS["iot"]
+    model_cls = DB_SOURCE_MODELS["iot"]
 
     breaker.record_failure()
     assert breaker.state.value == "open"

@@ -5,6 +5,9 @@ router = APIRouter(tags=["status"])
 
 @router.get("/status")
 async def status(request: Request) -> dict[str, dict[str, str | int]]:
+    '''
+    Returns the status of the breakers in the poller.
+    '''
     poller = request.app.state.poller
     return {
         name: {

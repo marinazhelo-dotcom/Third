@@ -11,6 +11,10 @@ EVENTS_EXCHANGE = "energy.events"
 # RabbitMQ queue the Telemetry service consumes IoT events from.
 TELEMETRY_IOT_QUEUE = "telemetry.iot.readings"
 
+# Redis pub/sub channels (subscribed by the UI via WebSocket).
+TELEMETRY_LIVE_CHANNEL = "telemetry.live"
+ALERTS_CHANNEL = "alerts"
+
 # Event type names (each source publishes a distinct type).
 IOT_READING_TYPE = "iot.reading"
 WEATHER_READING_TYPE = "weather.reading"
@@ -48,6 +52,21 @@ class IoTReadingEvent(ReadingEvent):
     type: Literal["iot.reading"] = IOT_READING_TYPE
     source: Literal["iot"] = "iot"
     payload: IoTReadingPayload
+
+
+class AlertEvent(BaseModel):
+    """An alert raised when a reading breaches a rule, published to Redis for the UI."""
+
+    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: Literal["alert"] = "alert"
+    produced_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    alert_id: int
+    device_id: str
+    rule_id: int
+    message: str
+    power_kw: float
+    threshold: float
+    acknowledged: bool = False
 
 
 def make_reading_event(source: str, reading: dict[str, Any]) -> ReadingEvent:

@@ -17,12 +17,14 @@ async def health() -> dict[str, str]:
 
 @router.get("/devices")
 async def devices(session: AsyncSession = Depends(get_session)) -> list[str]:
+    """List the distinct device IDs seen in the readings."""
     result = await session.execute(select(Reading.device_id).distinct())
     return sorted(row[0] for row in result.all())
 
 
 @router.get("/devices/{device_id}/latest")
 async def latest(device_id: str, request: Request) -> dict:
+    """Serve the latest reading for a device from the Redis cache."""
     reading = await request.app.state.cache.get_latest(device_id)
     if reading is None:
         raise HTTPException(status_code=404, detail=f"No reading for device {device_id!r}")
@@ -33,9 +35,10 @@ async def latest(device_id: str, request: Request) -> dict:
 async def readings(
     device_id: str,
     limit: int = Query(default=50, ge=1, le=500),
-    session: AsyncSession = Depends(get_session),
+    db_session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    result = await session.execute(
+    """Return the most recent readings for a device from PostgreSQL."""
+    result = await db_session.execute(
         select(Reading)
         .where(Reading.device_id == device_id)
         .order_by(Reading.timestamp.desc())
@@ -56,10 +59,11 @@ async def readings(
 async def stats(
     device_id: str,
     window_seconds: int = Query(default=3600, ge=1),
-    session: AsyncSession = Depends(get_session),
+    db_session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Return aggregate stats (count/avg/min/max) for a device over a time window."""
     since = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
-    result = await session.execute(
+    result = await db_session.execute(
         select(
             func.count().label("count"),
             func.avg(Reading.power_kw).label("avg_power_kw"),

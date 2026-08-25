@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Start the Redis cache and RabbitMQ consumer for the app's lifetime, clean up on shutdown."""
     cache = build_cache()
     app.state.cache = cache
     consumer = Consumer(get_settings().rabbitmq_url, on_event=EventHandler(cache))

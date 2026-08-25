@@ -9,10 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 class EventHandler:
+    """Handles a raw event body: parses it, persists to PostgreSQL, and updates Redis."""
+
     def __init__(self, cache: Cache):
         self._cache = cache
 
     async def __call__(self, body: bytes) -> None:
+        """Persist IoT readings to the DB, then refresh the cache and publish live."""
         event = parse_event(body)
         if not isinstance(event, IoTReadingEvent):
             logger.info("Ignoring event of type %s", event.type)

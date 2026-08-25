@@ -1,6 +1,6 @@
 import aio_pika
 
-from shared.events import EXCHANGE, ReadingEvent
+from shared.events import EVENTS_EXCHANGE, ReadingEvent
 
 
 class Publisher:
@@ -21,7 +21,7 @@ class Publisher:
         self._connection = await aio_pika.connect_robust(self._url)
         self._channel = await self._connection.channel()
         self._exchange = await self._channel.declare_exchange(
-            EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True
+            EVENTS_EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True
         )
 
     async def publish(self, event: ReadingEvent, routing_key: str) -> None:

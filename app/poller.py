@@ -3,6 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 import httpx
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.circuit_breaker import CircuitBreaker
@@ -124,7 +125,7 @@ class Poller:
             return
         await self._publish_readings(source.type, readings)
 
-    async def _publish_readings(self, source_type: str, readings: list) -> None:
+    async def _publish_readings(self, source_type: str, readings: list[BaseModel]) -> None:
         """Publish each reading as an event to RabbitMQ (best-effort).
 
         Failures here are logged but do not affect the source's circuit breaker.
@@ -139,7 +140,7 @@ class Poller:
             except Exception as exc:
                 logger.warning("Failed to publish %s event: %s", source_type, exc)
 
-    async def _persist(self, model_cls: type, readings: list) -> None:
+    async def _persist(self, model_cls: type, readings: list[BaseModel]) -> None:
         """Insert the fetched readings into the database in one transaction."""
         async with SessionLocal() as session:
             for reading in readings:

@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 
 import aio_pika
 
-from shared.events import EXCHANGE, QUEUE_TELEMETRY_IOT
+from shared.events import EVENTS_EXCHANGE, TELEMETRY_IOT_QUEUE
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ class Consumer:
         await self._channel.set_qos(prefetch_count=10)
         # QoS = Quality of Service (AMQP setting for how messages are delivered to a consumer)
         exchange = await self._channel.declare_exchange(
-            EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True
+            EVENTS_EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        queue = await self._channel.declare_queue(QUEUE_TELEMETRY_IOT, durable=True)
+        queue = await self._channel.declare_queue(TELEMETRY_IOT_QUEUE, durable=True)
         await queue.bind(exchange, routing_key="telemetry.iot")
         self._queue = queue
 

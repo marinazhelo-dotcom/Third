@@ -5,14 +5,21 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-EXCHANGE = "energy.events"
+# RabbitMQ topic exchange: events are published here and routed to queues by routing key.
+EVENTS_EXCHANGE = "energy.events"
 
-QUEUE_TELEMETRY_IOT = "telemetry.iot.readings"
+# RabbitMQ queue the Telemetry service consumes IoT events from.
+TELEMETRY_IOT_QUEUE = "telemetry.iot.readings"
+
+# Event type names (each source publishes a distinct type).
+IOT_READING_TYPE = "iot.reading"
+WEATHER_READING_TYPE = "weather.reading"
+MARKET_PRICE_TYPE = "market.price"
 
 EVENT_TYPES: dict[str, str] = {
-    "iot": "iot.reading",
-    "weather": "weather.reading",
-    "market": "market.price",
+    "iot": IOT_READING_TYPE,
+    "weather": WEATHER_READING_TYPE,
+    "market": MARKET_PRICE_TYPE,
 }
 
 ROUTING_KEYS: dict[str, str] = {
@@ -38,7 +45,7 @@ class IoTReadingPayload(BaseModel):
 
 
 class IoTReadingEvent(ReadingEvent):
-    type: Literal["iot.reading"] = "iot.reading"
+    type: Literal["iot.reading"] = IOT_READING_TYPE
     source: Literal["iot"] = "iot"
     payload: IoTReadingPayload
 
@@ -53,6 +60,6 @@ def make_reading_event(source: str, reading: dict[str, Any]) -> ReadingEvent:
 
 def parse_event(body: bytes) -> ReadingEvent:
     raw = json.loads(body)
-    if raw.get("type") == "iot.reading":
+    if raw.get("type") == IOT_READING_TYPE:
         return IoTReadingEvent.model_validate(raw)
     return ReadingEvent.model_validate(raw)

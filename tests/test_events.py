@@ -8,6 +8,7 @@ from shared.events import (
 
 
 def test_make_reading_event_sets_type_and_routing_info():
+    """make_reading_event sets the event type and source from the source name."""
     reading = {
         "device_id": "solar-1",
         "timestamp": datetime.now(timezone.utc),
@@ -21,6 +22,7 @@ def test_make_reading_event_sets_type_and_routing_info():
 
 
 def test_parse_event_roundtrips_to_typed_event():
+    """A serialized IoT event parses back into a typed IoTReadingEvent with a datetime."""
     reading = {
         "device_id": "solar-1",
         "timestamp": datetime.now(timezone.utc),
@@ -37,6 +39,7 @@ def test_parse_event_roundtrips_to_typed_event():
 
 
 def test_parse_event_non_iot_stays_generic():
+    """Non-IoT events parse to the generic ReadingEvent."""
     body = make_reading_event("weather", {"location": "berlin"}).model_dump_json().encode()
 
     event = parse_event(body)

@@ -19,7 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 class Poller:
+    """Runs one background polling loop per configured source.
+
+    Each loop fetches from its source, persists readings to the database,
+    and publishes them to RabbitMQ — guarded by a per-source circuit breaker.
+    """
+
     def __init__(self, config: AppConfig, rabbitmq_url: str | None = None):
+        """Set up the HTTP client, per-source circuit breakers, retry policy, and publisher."""
         self.config = config
         self._client = httpx.AsyncClient(timeout=10.0)
         self._breakers: dict[str, CircuitBreaker] = {}
@@ -42,12 +49,15 @@ class Poller:
             )
 
     def breaker_for(self, name: str) -> CircuitBreaker:
+        """Return the circuit breaker for the named source (e.g. "iot")."""
         return self._breakers[name]
 
     def breakers(self) -> dict[str, CircuitBreaker]:
+        """Return a mapping of source name -> circuit breaker (used by /status)."""
         return self._breakers
 
     async def start(self) -> None:
+        """Connect to RabbitMQ (best-effort) and spawn one async task per source."""
         if self._publisher is not None:
             try:
                 await self._publisher.connect()
@@ -64,6 +74,7 @@ class Poller:
         logger.info("Poller started with %d source(s)", len(self._tasks))
 
     async def stop(self) -> None:
+        """Cancel all polling tasks and close the HTTP client and RabbitMQ connection."""
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
@@ -73,6 +84,10 @@ class Poller:
         logger.info("Poller stopped")
 
     async def _run_source(self, source: SourceConfig) -> None:
+        """Run the polling loop for a single source until cancelled.
+
+        Fetches, then sleeps for the source's configured interval, forever.
+        """
         provider = get_source(source, self._client)
         breaker = self._breakers[source.name]
         model_cls = DB_SOURCE_MODELS[source.type]
@@ -89,6 +104,12 @@ class Poller:
         breaker: CircuitBreaker,
         model_cls: type, # name of the model class
     ) -> None:
+        """Perform one poll cycle: fetch (with retry), persist, then publish.
+
+        Updates the circuit breaker with success/failure. Publishing only
+        happens after a successful persist, and its own failures are logged
+        (not counted against the source).
+        """
         if not breaker.allow_request():
             logger.debug("Poller %s: circuit open, skipping", source.name)
             return
@@ -104,6 +125,10 @@ class Poller:
         await self._publish_readings(source.type, readings)
 
     async def _publish_readings(self, source_type: str, readings: list) -> None:
+        """Publish each reading as an event to RabbitMQ (best-effort).
+
+        Failures here are logged but do not affect the source's circuit breaker.
+        """
         if self._publisher is None or not readings:
             return
         routing_key = ROUTING_KEYS.get(source_type, f"{source_type}.reading")
@@ -115,6 +140,7 @@ class Poller:
                 logger.warning("Failed to publish %s event: %s", source_type, exc)
 
     async def _persist(self, model_cls: type, readings: list) -> None:
+        """Insert the fetched readings into the database in one transaction."""
         async with SessionLocal() as session:
             for reading in readings:
                 # model_dump() converts the Pydantic model to a dictionary

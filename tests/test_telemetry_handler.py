@@ -11,6 +11,8 @@ from shared.events import make_reading_event
 
 
 class FakeCache:
+    """In-memory stand-in for the Redis cache (latest + pub/sub)."""
+
     def __init__(self):
         self.latest: dict[str, dict] = {}
         self.published: list[dict] = []
@@ -38,6 +40,7 @@ def session_factory(engine):
 
 
 def make_iot_event_body() -> bytes:
+    """Serialize an IoT reading event to JSON bytes."""
     event = make_reading_event(
         "iot",
         {
@@ -51,6 +54,7 @@ def make_iot_event_body() -> bytes:
 
 
 async def test_handler_stores_iot_event(monkeypatch, session_factory):
+    """An IoT event is persisted to the DB and pushed to the cache + pub/sub."""
     monkeypatch.setattr("services.telemetry.app.handler.SessionLocal", session_factory)
     cache = FakeCache()
     handler = EventHandler(cache)
@@ -68,6 +72,7 @@ async def test_handler_stores_iot_event(monkeypatch, session_factory):
 
 
 async def test_handler_ignores_non_iot_event(monkeypatch, session_factory):
+    """Non-IoT events are ignored: nothing persisted, nothing cached."""
     monkeypatch.setattr("services.telemetry.app.handler.SessionLocal", session_factory)
     cache = FakeCache()
     handler = EventHandler(cache)

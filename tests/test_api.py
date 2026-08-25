@@ -23,17 +23,20 @@ async def client(session_factory):
 
 
 async def test_health(client): # client is a fixture
+    """The /health endpoint reports ok."""
     resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
 
 async def test_readings_unknown_source(client):
+    """Requesting an unknown source returns 404."""
     resp = await client.get("/readings/nope")
     assert resp.status_code == 404
 
 
 async def test_readings_returns_rows(client, session_factory):
+    """The endpoint returns rows persisted for a source, newest first."""
     async with session_factory() as session:
         session.add(
             IoTReading(
@@ -54,6 +57,7 @@ async def test_readings_returns_rows(client, session_factory):
 
 
 async def test_status(client):
+    """The /status endpoint reports each breaker's state."""
     class FakePoller:
         def breakers(self):
             return {"iot": CircuitBreaker(failure_threshold=2)}

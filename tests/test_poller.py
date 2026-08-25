@@ -14,6 +14,7 @@ def make_config(
     breaker: BreakerConfig | None = None,
     retry: RetryConfig | None = None,
 ) -> AppConfig:
+    """Build an AppConfig with defaults tuned for fast tests (short retry delays)."""
     return AppConfig(
         breaker=breaker or BreakerConfig(failure_threshold=3),
         retry=retry or RetryConfig(max_attempts=2, base_delay_seconds=0.001),
@@ -22,10 +23,12 @@ def make_config(
 
 
 def iot_source(url: str = "http://iot.test/data") -> SourceConfig:
+    """Return a minimal IoT SourceConfig pointing at the given URL."""
     return SourceConfig(name="iot", type="iot", url=url, interval_seconds=5)
 
 
 async def test_poll_once_stores_readings(monkeypatch, session_factory):
+    """A successful poll persists the fetched reading and leaves the breaker closed."""
     monkeypatch.setattr("app.poller.SessionLocal", session_factory)
     poller = Poller(make_config([iot_source()]))
     source = poller.config.sources[0]
@@ -58,6 +61,7 @@ async def test_poll_once_stores_readings(monkeypatch, session_factory):
 
 
 async def test_poll_once_retries_then_trips_breaker(monkeypatch, session_factory):
+    """Repeated failures (with retries) eventually open the circuit breaker."""
     monkeypatch.setattr("app.poller.SessionLocal", session_factory)
     config = make_config(
         [iot_source()], breaker=BreakerConfig(failure_threshold=2, cooldown_seconds=60)
@@ -82,6 +86,7 @@ async def test_poll_once_retries_then_trips_breaker(monkeypatch, session_factory
 
 
 async def test_poll_once_skips_when_open(monkeypatch, session_factory):
+    """When the breaker is already open, the poller skips the HTTP call entirely."""
     monkeypatch.setattr("app.poller.SessionLocal", session_factory)
     config = make_config(
         [iot_source()], breaker=BreakerConfig(failure_threshold=1, cooldown_seconds=60)

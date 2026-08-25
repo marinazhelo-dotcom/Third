@@ -9,10 +9,12 @@ from app.sources.weather import WeatherProvider
 
 
 def make_source(type_: str) -> SourceConfig:
+    """Build a SourceConfig of the given type."""
     return SourceConfig(name=type_, type=type_, url="http://x.test", interval_seconds=5)
 
 
 async def test_factory_maps_types():
+    """The factory returns the correct provider class per source type."""
     client = httpx.AsyncClient()
     try:
         assert isinstance(get_source(make_source("iot"), client), IoTProvider)
@@ -23,6 +25,7 @@ async def test_factory_maps_types():
 
 
 async def test_factory_unknown_type_raises():
+    """An unknown source type raises ValueError."""
     client = httpx.AsyncClient()
     try:
         with pytest.raises(ValueError):

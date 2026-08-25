@@ -1,0 +1,83 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672" # for code
+      - "15672:15672" # UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: telemetry
+      POSTGRES_DB: telemetry
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemetry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  mock:
+    build: .
+    command: ["uv", "run", "uvicorn", "app.mock_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports:
+      - "9000:9000"
+
+  ingest:
+    build: .
+    command:
+      - sh
+      - -c
+      - "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mock:
+        condition: service_started
+    environment:
+      THIRD_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      THIRD_CONFIG_PATH: /app/config.docker.yaml
+    ports:
+      - "8000:8000"
+
+  telemetry:
+    build: .
+    command:
+      - sh
+      - -c
+      - "uv run alembic -c services/telemetry/alembic.ini upgrade head && uv run uvicorn services.telemetry.app.main:app --host 0.0.0.0 --port 8010"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      TELEMETRY_DATABASE_URL: postgresql+asyncpg://telemetry:telemetry@postgres:5432/telemetry
+      TELEMETRY_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      TELEMETRY_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8010:8010"
+
+volumes:
+  pgdata:

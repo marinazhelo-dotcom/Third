@@ -85,7 +85,7 @@ services:
     command:
       - sh
       - -c
-      - "uv run alembic -c services/alert_auth/alembic.ini upgrade head && uv run uvicorn services.alert_auth.app.main:app --host 0.0.0.0 --port 8020"
+      - "uv run alembic -c services/alert_auth/alembic.ini upgrade head && uv run uvicorn services.alert_auth.main:app --host 0.0.0.0 --port 8020"
     depends_on:
       rabbitmq:
         condition: service_healthy

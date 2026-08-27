@@ -5,7 +5,8 @@ import logging
 import redis.asyncio as redis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from services.alert_auth.app.security import decode_token
+from services.alert_auth.adapters.security.jwt import PyJWTTokenService
+from services.alert_auth.infrastructure.config import get_settings
 from shared.events import ALERTS_CHANNEL, TELEMETRY_LIVE_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=1008)
         return
     try:
-        user = decode_token(token)
+        user = PyJWTTokenService().decode_token(token)
     except Exception:
         await websocket.close(code=1008)
         return

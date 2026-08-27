@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from services.alert_auth.app.db import Base
+from services.alert_auth.infrastructure.database import Base
 
 
 def _now() -> datetime:

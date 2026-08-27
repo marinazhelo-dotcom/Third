@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-from services.alert_auth.app.config import get_settings
-from services.alert_auth.app.db import Base
-from services.alert_auth.app import models  # noqa: F401  (register models on Base.metadata)
+from services.alert_auth.infrastructure.config import get_settings
+from services.alert_auth.infrastructure.database import Base
+from services.alert_auth.adapters.persistence import models  # noqa: F401  (register models on Base.metadata)
 
 config = context.config
 

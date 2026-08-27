@@ -1,13 +1,12 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from services.alert_auth.app.config import get_settings
-from services.alert_auth.app.models import Alert, AlertRule
+from services.alert_auth.domain.models import Alert, AlertRule
+from services.alert_auth.domain.ports import AlertRepository, AlertRuleRepository
 
 logger = logging.getLogger(__name__)
+
+COOLDOWN_SECONDS = 60
 
 
 def _ensure_aware(dt: datetime) -> datetime:
@@ -16,18 +15,22 @@ def _ensure_aware(dt: datetime) -> datetime:
     return dt
 
 
-async def evaluate_reading(session: AsyncSession, device_id: str, power_kw: float) -> list[Alert]:
-    """Create alerts for any enabled rules the reading breaches (with a cooldown)."""
-    result = await session.execute(
-        select(AlertRule).where(
-            AlertRule.device_id == device_id, AlertRule.enabled.is_(True)
-        )
-    )
-    rules = result.scalars().all()
+async def evaluate_reading(
+    rule_repo: AlertRuleRepository,
+    alert_repo: AlertRepository,
+    device_id: str,
+    power_kw: float,
+    cooldown_seconds: int = COOLDOWN_SECONDS,
+) -> list[Alert]:
+    """Domain rule: create alerts for any enabled rules the reading breaches (with a cooldown).
+
+    This is pure business logic — no framework imports.
+    """
+    rules = await rule_repo.list_enabled_for_device(device_id)
 
     now = datetime.now(timezone.utc)
     # timedelta here because this will be campared to datetime
-    cooldown = timedelta(seconds=get_settings().alert_cooldown_seconds)
+    cooldown = timedelta(seconds=cooldown_seconds)
     triggered: list[Alert] = []
 
     for rule in rules:
@@ -44,12 +47,11 @@ async def evaluate_reading(session: AsyncSession, device_id: str, power_kw: floa
             power_kw=power_kw,
             threshold=rule.threshold,
         )
-        session.add(alert)
-        rule.last_alert_at = now
+        alert = await alert_repo.create(alert)
+        await rule_repo.touch_last_alert(rule.id)
         triggered.append(alert)
 
     if triggered:
-        await session.commit()
         logger.info("Raised %d alert(s) for device %s", len(triggered), device_id)
 
     return triggered

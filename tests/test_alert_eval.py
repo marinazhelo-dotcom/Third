@@ -1,9 +1,10 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from services.alert_auth.app.alerts import evaluate_reading
-from services.alert_auth.app.db import Base
-from services.alert_auth.app.models import AlertRule
+from services.alert_auth.adapters.persistence.models import AlertRule
+from services.alert_auth.adapters.persistence.repository import SqlAlertRepository, SqlAlertRuleRepository
+from services.alert_auth.domain.rules import evaluate_reading
+from services.alert_auth.infrastructure.database import Base
 
 
 @pytest.fixture
@@ -30,7 +31,9 @@ async def _add_rule(session_factory, device_id="solar-1", threshold=10.0):
 async def test_breach_creates_alert(session_factory):
     await _add_rule(session_factory)
     async with session_factory() as session:
-        alerts = await evaluate_reading(session, "solar-1", 15.0)
+        rule_repo = SqlAlertRuleRepository(session)
+        alert_repo = SqlAlertRepository(session)
+        alerts = await evaluate_reading(rule_repo, alert_repo, "solar-1", 15.0)
     assert len(alerts) == 1
     assert alerts[0].device_id == "solar-1"
     assert alerts[0].power_kw == 15.0
@@ -39,16 +42,22 @@ async def test_breach_creates_alert(session_factory):
 async def test_no_breach_no_alert(session_factory):
     await _add_rule(session_factory)
     async with session_factory() as session:
-        alerts = await evaluate_reading(session, "solar-1", 5.0)
+        rule_repo = SqlAlertRuleRepository(session)
+        alert_repo = SqlAlertRepository(session)
+        alerts = await evaluate_reading(rule_repo, alert_repo, "solar-1", 5.0)
     assert alerts == []
 
 
 async def test_cooldown_suppresses_repeat_alert(session_factory):
     await _add_rule(session_factory)
     async with session_factory() as session:
-        first = await evaluate_reading(session, "solar-1", 15.0)
+        rule_repo = SqlAlertRuleRepository(session)
+        alert_repo = SqlAlertRepository(session)
+        first = await evaluate_reading(rule_repo, alert_repo, "solar-1", 15.0)
     async with session_factory() as session:
-        second = await evaluate_reading(session, "solar-1", 20.0)
+        rule_repo = SqlAlertRuleRepository(session)
+        alert_repo = SqlAlertRepository(session)
+        second = await evaluate_reading(rule_repo, alert_repo, "solar-1", 20.0)
     assert len(first) == 1
     assert second == []
 
@@ -56,5 +65,7 @@ async def test_cooldown_suppresses_repeat_alert(session_factory):
 async def test_rule_for_other_device_ignored(session_factory):
     await _add_rule(session_factory, device_id="solar-1")
     async with session_factory() as session:
-        alerts = await evaluate_reading(session, "wind-3", 15.0)
+        rule_repo = SqlAlertRuleRepository(session)
+        alert_repo = SqlAlertRepository(session)
+        alerts = await evaluate_reading(rule_repo, alert_repo, "wind-3", 15.0)
     assert alerts == []

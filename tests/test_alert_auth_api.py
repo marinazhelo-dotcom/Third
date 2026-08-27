@@ -2,10 +2,14 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from services.alert_auth.app.db import Base, get_session
-from services.alert_auth.app.main import app
-from services.alert_auth.app.models import User
-from services.alert_auth.app.security import create_access_token, hash_password
+from services.alert_auth.adapters.persistence.models import User
+from services.alert_auth.adapters.security.password import BcryptPasswordHasher
+from services.alert_auth.adapters.security.jwt import PyJWTTokenService
+from services.alert_auth.infrastructure.database import Base
+from services.alert_auth.main import app
+
+_hasher = BcryptPasswordHasher()
+_tokens = PyJWTTokenService()
 
 
 @pytest.fixture
@@ -25,21 +29,22 @@ def session_factory(engine):
 
 @pytest.fixture
 async def client(session_factory):
-    async def override_get_session():
-        async with session_factory() as session:
-            yield session
+    from services.alert_auth.adapters.security.fastapi_deps import set_token_service
 
-    app.dependency_overrides[get_session] = override_get_session
+    set_token_service(_tokens)
+    app.state.hasher = _hasher
+    app.state.tokens = _tokens
+    app.state.session_factory = session_factory
+
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-    app.dependency_overrides.clear()
 
 
 async def _seed_users(session_factory):
     async with session_factory() as session:
-        session.add(User(username="admin", password_hash=hash_password("admin123"), role="admin"))
-        session.add(User(username="viewer", password_hash=hash_password("viewer"), role="viewer"))
+        session.add(User(username="admin", password_hash=_hasher.hash("admin123"), role="admin"))
+        session.add(User(username="viewer", password_hash=_hasher.hash("viewer"), role="viewer"))
         await session.commit()
 
 
@@ -65,7 +70,7 @@ async def test_rules_requires_auth(client):
 
 async def test_viewer_cannot_create_rule(client, session_factory):
     await _seed_users(session_factory)
-    token = create_access_token(2, "viewer", "viewer")
+    token = _tokens.create_token(2, "viewer", "viewer")
     resp = await client.post(
         "/rules",
         json={"device_id": "solar-1", "threshold": 10.0},
@@ -76,7 +81,7 @@ async def test_viewer_cannot_create_rule(client, session_factory):
 
 async def test_admin_can_create_rule(client, session_factory):
     await _seed_users(session_factory)
-    token = create_access_token(1, "admin", "admin")
+    token = _tokens.create_token(1, "admin", "admin")
     resp = await client.post(
         "/rules",
         json={"device_id": "solar-1", "threshold": 10.0},
@@ -89,7 +94,7 @@ async def test_admin_can_create_rule(client, session_factory):
 async def test_delete_rule_is_idempotent(client, session_factory):
     """Deleting the same rule twice (or a missing rule) returns success both times."""
     await _seed_users(session_factory)
-    token = create_access_token(1, "admin", "admin")
+    token = _tokens.create_token(1, "admin", "admin")
 
     create = await client.post(
         "/rules",

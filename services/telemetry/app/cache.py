@@ -3,8 +3,7 @@ import json
 import redis.asyncio as redis
 
 from services.telemetry.app.config import get_settings
-
-LIVE_CHANNEL = "telemetry.live"
+from shared.events import TELEMETRY_LIVE_CHANNEL
 
 
 class Cache:
@@ -27,7 +26,7 @@ class Cache:
 
     async def publish_live(self, reading: dict) -> None:
         """Publish a reading to the live telemetry channel (pub/sub)."""
-        await self._client.publish(LIVE_CHANNEL, json.dumps(reading, default=str))
+        await self._client.publish(TELEMETRY_LIVE_CHANNEL, json.dumps(reading, default=str))
 
     async def close(self) -> None:
         await self._client.aclose()

@@ -35,6 +35,7 @@ services:
       retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
   mock:
     build: .
@@ -78,6 +79,34 @@ services:
       TELEMETRY_REDIS_URL: redis://redis:6379/0
     ports:
       - "8010:8010"
+
+  alert_auth:
+    build: .
+    command:
+      - sh
+      - -c
+      - "uv run alembic -c services/alert_auth/alembic.ini upgrade head && uv run uvicorn services.alert_auth.app.main:app --host 0.0.0.0 --port 8020"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      ALERTAUTH_DATABASE_URL: postgresql+asyncpg://telemetry:telemetry@postgres:5432/alertauth
+      ALERTAUTH_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      ALERTAUTH_REDIS_URL: redis://redis:6379/0
+      ALERTAUTH_JWT_SECRET: dev-only-secret-key-change-me-in-production-0001
+    ports:
+      - "8020:8020"
+
+  ui:
+    build: ./ui
+    depends_on:
+      - alert_auth
+    ports:
+      - "3000:80"
 
 volumes:
   pgdata:

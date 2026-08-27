@@ -6,3 +6,5 @@ __pycache__/
 *.db
 .idea/
 .vscode/
+ui/node_modules/
+ui/dist/

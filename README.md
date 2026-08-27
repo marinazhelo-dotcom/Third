@@ -99,4 +99,24 @@ curl 127.0.0.1:8010/devices/solar-1/readings        # from PostgreSQL
 curl 127.0.0.1:8010/devices/solar-1/stats?window_seconds=3600  # avg/min/max aggregates
 ```
 
+### Alert/Auth + UI
+
+The alert-auth service consumes IoT events, evaluates alert rules, and publishes alerts;
+the React UI (nginx) shows live telemetry + alerts and manages rules.
+
+```bash
+# UI: http://localhost:3000  (login: admin / admin123)
+
+# Alert/Auth API (also proxied at :3000/api/*)
+TOKEN=$(curl -s -X POST 127.0.0.1:8020/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+curl -s 127.0.0.1:8020/rules -H "Authorization: Bearer $TOKEN"              # list rules
+curl -s -X POST 127.0.0.1:8020/rules -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"device_id":"solar-1","threshold":0.0}'  # create rule (admin)
+curl -s 127.0.0.1:8020/alerts -H "Authorization: Bearer $TOKEN"             # list alerts
+curl -s -X POST 127.0.0.1:8020/alerts/1/ack -H "Authorization: Bearer $TOKEN"  # ack (operator/admin)
+```
+
 Stop it: `docker compose down`

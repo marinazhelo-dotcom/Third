@@ -1,10 +1,11 @@
-import logging
+import structlog
 from datetime import datetime, timedelta, timezone
 
 from services.alert_auth.domain.models import Alert, AlertRule
 from services.alert_auth.domain.ports import AlertRepository, AlertRuleRepository
+from shared.metrics import ALERTS_RAISED_TOTAL
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 COOLDOWN_SECONDS = 60
 
@@ -52,6 +53,7 @@ async def evaluate_reading(
         triggered.append(alert)
 
     if triggered:
-        logger.info("Raised %d alert(s) for device %s", len(triggered), device_id)
+        ALERTS_RAISED_TOTAL.inc(len(triggered))
+        logger.info("alerts_raised", count=len(triggered), device_id=device_id)
 
     return triggered

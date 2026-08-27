@@ -37,6 +37,22 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
   mock:
     build: .
     command: ["uv", "run", "uvicorn", "app.mock_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
@@ -57,6 +73,8 @@ services:
     environment:
       THIRD_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       THIRD_CONFIG_PATH: /app/config.docker.yaml
+      OTEL_SERVICE_NAME: ingest
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8000:8000"
 
@@ -77,6 +95,8 @@ services:
       TELEMETRY_DATABASE_URL: postgresql+asyncpg://telemetry:telemetry@postgres:5432/telemetry
       TELEMETRY_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       TELEMETRY_REDIS_URL: redis://redis:6379/0
+      OTEL_SERVICE_NAME: telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8010:8010"
 
@@ -98,6 +118,8 @@ services:
       ALERTAUTH_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       ALERTAUTH_REDIS_URL: redis://redis:6379/0
       ALERTAUTH_JWT_SECRET: dev-only-secret-key-change-me-in-production-0001
+      OTEL_SERVICE_NAME: alert_auth
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8020:8020"
 

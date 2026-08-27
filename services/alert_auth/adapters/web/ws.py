@@ -1,15 +1,15 @@
 import asyncio
 import json
-import logging
 
 import redis.asyncio as redis
+import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from services.alert_auth.adapters.security.jwt import PyJWTTokenService
 from services.alert_auth.infrastructure.config import get_settings
 from shared.events import ALERTS_CHANNEL, TELEMETRY_LIVE_CHANNEL
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -65,7 +65,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=1008)
         return
 
-    logger.info("WS connected: user %s (%s)", user.get("sub"), user.get("role"))
+    logger.info("ws_connected", user_id=user.get("sub"), role=user.get("role"))
     await manager.connect(websocket)
     try:
         while True:

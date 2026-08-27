@@ -1,8 +1,8 @@
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 
 import httpx
+import structlog
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -14,9 +14,9 @@ from app.publisher import Publisher
 from app.sources.base import SourceProvider
 from app.sources.factory import get_source
 from shared.events import ROUTING_KEYS, make_reading_event
+from shared.metrics import IOT_READINGS_TOTAL
 
-logger = logging.getLogger(__name__)
-# __name__ is the name of the module (app.poller)
+logger = structlog.get_logger()
 
 
 class Poller:
@@ -34,8 +34,8 @@ class Poller:
         self._tasks: list[asyncio.Task] = []
         self._publisher = Publisher(rabbitmq_url) if rabbitmq_url else None
         # retry is a decorator that will retry the function if it fails
-        # _retry is a callable that takes a function and returns another callable, 
-        # which when awaited returns a list. 
+        # _retry is a callable that takes a function and returns another callable,
+        # which when awaited returns a list.
         self._retry: Callable[..., Callable[..., Awaitable[list]]] = retry(
             stop=stop_after_attempt(config.retry.max_attempts),
             wait=wait_exponential(multiplier=config.retry.base_delay_seconds, max=10),
@@ -44,6 +44,7 @@ class Poller:
 
         for source in config.sources:
             self._breakers[source.name] = CircuitBreaker(
+                source_name=source.name,
                 failure_threshold=config.breaker.failure_threshold,
                 cooldown_seconds=config.breaker.cooldown_seconds,
                 half_open_max_probes=config.breaker.half_open_max_probes,
@@ -62,9 +63,9 @@ class Poller:
         if self._publisher is not None:
             try:
                 await self._publisher.connect()
-                logger.info("Poller connected to RabbitMQ")
+                logger.info("rabbitmq_connected")
             except Exception as exc:
-                logger.warning("Poller could not connect to RabbitMQ: %s", exc)
+                logger.warning("rabbitmq_connect_failed", error=str(exc))
         for source in self.config.sources:
             task = asyncio.create_task( # sends to the event loop
                 # _run_source will be executed when the event loop next has a turn
@@ -72,7 +73,7 @@ class Poller:
                 self._run_source(source), name=f"poll-{source.name}"
             )
             self._tasks.append(task)
-        logger.info("Poller started with %d source(s)", len(self._tasks))
+        logger.info("poller_started", source_count=len(self._tasks))
 
     async def stop(self) -> None:
         """Cancel all polling tasks and close the HTTP client and RabbitMQ connection."""
@@ -82,7 +83,7 @@ class Poller:
         await self._client.aclose()
         if self._publisher is not None:
             await self._publisher.close()
-        logger.info("Poller stopped")
+        logger.info("poller_stopped")
 
     async def _run_source(self, source: SourceConfig) -> None:
         """Run the polling loop for a single source until cancelled.
@@ -92,7 +93,7 @@ class Poller:
         provider = get_source(source, self._client)
         breaker = self._breakers[source.name]
         model_cls = DB_SOURCE_MODELS[source.type]
-        logger.info("Poller %s started (every %.1fs)", source.name, source.interval_seconds)
+        logger.info("source_started", source=source.name, interval=source.interval_seconds)
 
         while True:
             await self._poll_once(source, provider, breaker, model_cls)
@@ -112,16 +113,18 @@ class Poller:
         (not counted against the source).
         """
         if not breaker.allow_request():
-            logger.debug("Poller %s: circuit open, skipping", source.name)
+            logger.debug("circuit_open_skip", source=source.name)
             return
         try:
             readings = await self._retry(provider.fetch)()
             await self._persist(model_cls, readings)
             breaker.record_success()
-            logger.info("Poller %s: stored %d reading(s)", source.name, len(readings))
+            for r in readings:
+                IOT_READINGS_TOTAL.labels(device_id=getattr(r, "device_id", "unknown"), source=source.name).inc()
+            logger.info("readings_stored", source=source.name, count=len(readings))
         except Exception as exc:
             breaker.record_failure()
-            logger.warning("Poller %s failed: %s", source.name, exc)
+            logger.warning("poll_failed", source=source.name, error=str(exc))
             return
         await self._publish_readings(source.type, readings)
 
@@ -138,7 +141,7 @@ class Poller:
             try:
                 await self._publisher.publish(event, routing_key)
             except Exception as exc:
-                logger.warning("Failed to publish %s event: %s", source_type, exc)
+                logger.warning("publish_failed", source_type=source_type, error=str(exc))
 
     async def _persist(self, model_cls: type, readings: list[BaseModel]) -> None:
         """Insert the fetched readings into the database in one transaction."""

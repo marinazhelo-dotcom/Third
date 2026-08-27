@@ -1,11 +1,12 @@
-import logging
+import structlog
 
 from services.telemetry.app.cache import Cache
 from services.telemetry.app.db import SessionLocal
 from services.telemetry.app.models import Reading
 from shared.events import IoTReadingEvent, parse_event
+from shared.metrics import TELEMETRY_EVENTS_CONSUMED_TOTAL, TELEMETRY_READINGS_STORED_TOTAL
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class EventHandler:
@@ -18,7 +19,7 @@ class EventHandler:
         """Persist IoT readings to the DB, then refresh the cache and publish live."""
         event = parse_event(body)
         if not isinstance(event, IoTReadingEvent):
-            logger.info("Ignoring event of type %s", event.type)
+            logger.info("event_ignored", event_type=event.type)
             return
 
         payload = event.payload
@@ -36,4 +37,6 @@ class EventHandler:
         reading = payload.model_dump(mode="json")
         await self._cache.set_latest(payload.device_id, reading)
         await self._cache.publish_live(reading)
-        logger.debug("Handled event %s for device %s", event.event_id, payload.device_id)
+        TELEMETRY_EVENTS_CONSUMED_TOTAL.inc()
+        TELEMETRY_READINGS_STORED_TOTAL.inc()
+        logger.debug("event_handled", event_id=event.event_id, device_id=payload.device_id)

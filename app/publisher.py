@@ -1,6 +1,10 @@
 import aio_pika
+import structlog
 
 from shared.events import EVENTS_EXCHANGE, ReadingEvent
+from shared.metrics import EVENTS_PUBLISHED_TOTAL
+
+logger = structlog.get_logger()
 
 
 class Publisher:
@@ -37,6 +41,7 @@ class Publisher:
         # a = "é"  -> one character, U+00E9
         # b = a.encode("utf-8")  -> b'\xc3\xa9' -> two bytes: 195, 169
         await self._exchange.publish(message, routing_key=routing_key)
+        EVENTS_PUBLISHED_TOTAL.labels(routing_key=routing_key).inc()
 
     async def close(self) -> None:
         """Close the RabbitMQ connection."""

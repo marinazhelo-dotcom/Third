@@ -1,10 +1,10 @@
-import logging
+import structlog
 
 from services.alert_auth.domain.ports import AlertPublisher, AlertRepository, AlertRuleRepository
 from services.alert_auth.domain.rules import evaluate_reading
 from shared.events import AlertEvent, IoTReadingEvent, parse_event
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class AlertHandler:
@@ -48,4 +48,4 @@ class AlertHandler:
                 acknowledged=alert.acknowledged,
             )
             await self._publisher.publish_alert(alert_event.model_dump())
-            logger.info("Published alert %d for device %s", alert.id, alert.device_id)
+            logger.info("alert_published", alert_id=alert.id, device_id=alert.device_id)

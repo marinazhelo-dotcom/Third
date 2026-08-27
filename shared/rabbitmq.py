@@ -1,10 +1,10 @@
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 
 import aio_pika
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 EventCallback = Callable[[bytes], Awaitable[None]]
 
@@ -45,7 +45,7 @@ class RabbitMQConsumer:
         """Connect and begin consuming in a background task."""
         await self.connect()
         self._task = asyncio.create_task(self._consume(), name=self._task_name)
-        logger.info("%s started", self._task_name)
+        logger.info("consumer_started", task_name=self._task_name)
 
     async def _consume(self) -> None:
         """Loop forever, passing each message body to the callback and acking on success."""
@@ -62,4 +62,4 @@ class RabbitMQConsumer:
             await asyncio.gather(self._task, return_exceptions=True)
         if self._connection is not None:
             await self._connection.close()
-        logger.info("%s stopped", self._task_name)
+        logger.info("consumer_stopped", task_name=self._task_name)

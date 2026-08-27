@@ -141,6 +141,9 @@ services:
     build: ./ui
     depends_on:
       - alert_auth
+      - grafana
+      - prometheus
+      - jaeger
     ports:
       - "3000:80"
 

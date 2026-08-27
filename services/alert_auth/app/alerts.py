@@ -26,13 +26,15 @@ async def evaluate_reading(session: AsyncSession, device_id: str, power_kw: floa
     rules = result.scalars().all()
 
     now = datetime.now(timezone.utc)
+    # timedelta here because this will be campared to datetime
     cooldown = timedelta(seconds=get_settings().alert_cooldown_seconds)
     triggered: list[Alert] = []
 
     for rule in rules:
         if power_kw <= rule.threshold:
             continue
-        if rule.last_alert_at is not None and now - _ensure_aware(rule.last_alert_at) < cooldown:
+        if rule.last_alert_at is not None \
+        and now - _ensure_aware(rule.last_alert_at) < cooldown:
             continue
 
         alert = Alert(

@@ -100,17 +100,18 @@ async def delete_rule(
     session: AsyncSession = Depends(get_session),
     _: dict = Depends(admin_only),
 ) -> dict:
+    """Delete a rule; idempotent — deleting a missing rule is a no-op success."""
     rule = await session.get(AlertRule, rule_id)
-    if rule is None:
-        raise HTTPException(status_code=404, detail="Rule not found")
-    await session.delete(rule)
-    await session.commit()
+    if rule is not None:
+        await session.delete(rule)
+        await session.commit()
     return {"deleted": rule_id}
 
 
 @router.get("/alerts")
 async def list_alerts(
-    limit: int = Query(default=50, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500), 
+    # specifying default makes it optional
     session: AsyncSession = Depends(get_session),
     _: dict = Depends(get_current_user),
 ) -> list[dict]:

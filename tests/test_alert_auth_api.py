@@ -84,3 +84,28 @@ async def test_admin_can_create_rule(client, session_factory):
     )
     assert resp.status_code == 200
     assert resp.json()["device_id"] == "solar-1"
+
+
+async def test_delete_rule_is_idempotent(client, session_factory):
+    """Deleting the same rule twice (or a missing rule) returns success both times."""
+    await _seed_users(session_factory)
+    token = create_access_token(1, "admin", "admin")
+
+    create = await client.post(
+        "/rules",
+        json={"device_id": "solar-1", "threshold": 10.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    rule_id = create.json()["id"]
+
+    first = await client.delete(f"/rules/{rule_id}", headers={"Authorization": f"Bearer {token}"})
+    assert first.status_code == 200
+    assert first.json() == {"deleted": rule_id}
+
+    second = await client.delete(f"/rules/{rule_id}", headers={"Authorization": f"Bearer {token}"})
+    assert second.status_code == 200
+    assert second.json() == {"deleted": rule_id}
+
+    missing = await client.delete("/rules/9999", headers={"Authorization": f"Bearer {token}"})
+    assert missing.status_code == 200
+    assert missing.json() == {"deleted": 9999}

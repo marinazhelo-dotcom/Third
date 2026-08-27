@@ -59,6 +59,12 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "http://localhost:3000/grafana/"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -140,10 +146,14 @@ services:
   ui:
     build: ./ui
     depends_on:
-      - alert_auth
-      - grafana
-      - prometheus
-      - jaeger
+      alert_auth:
+        condition: service_started
+      grafana:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      jaeger:
+        condition: service_started
     ports:
       - "3000:80"
 

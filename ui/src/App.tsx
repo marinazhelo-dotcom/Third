@@ -99,6 +99,7 @@ export default function App() {
       <header className="app-header">
         <h1>Third — Energy Platform</h1>
         <div className="app-header-right">
+          <a href="/links" className="nav-link">Tools</a>
           <span className="badge">{session.role}</span>
           <span>{session.username}</span>
           <span className={`ws-dot ws-${wsStatus}`} title={`ws: ${wsStatus}`} />

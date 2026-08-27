@@ -38,6 +38,7 @@ export function Login({ onLogin }: { onLogin: (s: Session) => void }) {
         />
         {error && <p className="error">{error}</p>}
         <button type="submit">Login</button>
+        <a href="/links" className="nav-link login-tools">Tools &amp; Dashboards</a>
       </form>
     </div>
   );

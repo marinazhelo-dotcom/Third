@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
 
 from services.alert_auth.adapters.persistence.repository import (
     SqlAlertRepository,
@@ -32,6 +33,12 @@ async def login(body: LoginRequest, request: Request) -> dict:
     async with sf() as session:
         service = AuthLogin(SqlUserRepository(session), request.app.state.hasher, request.app.state.tokens)
         return await service.execute(body.username, body.password)
+
+
+@router.get("/auth/verify")
+async def verify_token(request: Request, _: dict = Depends(get_current_user)) -> JSONResponse:
+    """Verify JWT token — used by nginx auth_request for proxy authentication."""
+    return JSONResponse(content={"valid": True})
 
 
 @router.post("/auth/register")

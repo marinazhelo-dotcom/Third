@@ -7,6 +7,16 @@ import { TelemetryBoard } from "./components/TelemetryBoard";
 import type { AlertItem, Rule, Session, TelemetryPoint, WsMessage } from "./types";
 
 const SESSION_KEY = "third_session";
+const COOKIE_NAME = "third_token";
+
+function setCookie(name: string, value: string, days: number) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+}
 
 function loadSession(): Session | null {
   const raw = localStorage.getItem(SESSION_KEY);
@@ -79,11 +89,13 @@ export default function App() {
 
   const handleLogin = (s: Session) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    setCookie(COOKIE_NAME, s.accessToken, 7);
     setSession(s);
   };
 
   const handleLogout = () => {
     localStorage.removeItem(SESSION_KEY);
+    deleteCookie(COOKIE_NAME);
     setSession(null);
     setTelemetry({});
     setAlerts([]);

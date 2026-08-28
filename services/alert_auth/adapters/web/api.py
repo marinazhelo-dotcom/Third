@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+import jwt as pyjwt
+
 from services.alert_auth.adapters.persistence.repository import (
     SqlAlertRepository,
     SqlAlertRuleRepository,
@@ -9,6 +11,7 @@ from services.alert_auth.adapters.persistence.repository import (
 from services.alert_auth.adapters.security.fastapi_deps import (
     ROLE_ADMIN,
     ROLE_OPERATOR,
+    _get_ts,
     get_current_user,
     require_roles,
 )
@@ -36,8 +39,23 @@ async def login(body: LoginRequest, request: Request) -> dict:
 
 
 @router.get("/auth/verify")
-async def verify_token(request: Request, _: dict = Depends(get_current_user)) -> JSONResponse:
-    """Verify JWT token — used by nginx auth_request for proxy authentication."""
+async def verify_token(request: Request) -> JSONResponse:
+    """Verify JWT token — used by nginx auth_request for proxy authentication.
+
+    Accepts both ``Authorization: Bearer <token>`` and raw ``Authorization: <token>``
+    (the latter is what nginx sends when forwarding the ``third_token`` cookie).
+    """
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:]
+    else:
+        token = auth
+    if not token:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    try:
+        _get_ts().decode_token(token)
+    except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
+        return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
     return JSONResponse(content={"valid": True})
 
 

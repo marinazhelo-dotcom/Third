@@ -1,0 +1,32 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Platform",
+      "type": "text",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Third — Energy Management Platform\n\n| Service | URL |\n|---------|-----|\n| Dashboard | [Open](/) |\n| All Links | [Open](/links) |\n| Prometheus | [Open](/prometheus/) |\n| Jaeger | [Open](/jaeger/) |"
+      }
+    },
+    {
+      "title": "Quick Links",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "collapsed": false
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["home"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Home",
+  "uid": "platform-home",
+  "version": 1
+}

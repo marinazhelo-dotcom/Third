@@ -1,21 +1,19 @@
-from services.alert_auth.app.security import (
-    create_access_token,
-    decode_token,
-    hash_password,
-    verify_password,
-)
+from services.alert_auth.adapters.security.password import BcryptPasswordHasher
+from services.alert_auth.adapters.security.jwt import PyJWTTokenService
 
 
 def test_password_hash_roundtrip():
-    hashed = hash_password("secret")
+    hasher = BcryptPasswordHasher()
+    hashed = hasher.hash("secret")
     assert hashed != "secret"
-    assert verify_password("secret", hashed)
-    assert not verify_password("wrong", hashed)
+    assert hasher.verify("secret", hashed)
+    assert not hasher.verify("wrong", hashed)
 
 
 def test_token_roundtrip():
-    token = create_access_token(42, "admin", "bob")
-    payload = decode_token(token)
+    tokens = PyJWTTokenService()
+    token = tokens.create_token(42, "admin", "bob")
+    payload = tokens.decode_token(token)
     assert payload["sub"] == "42"
     assert payload["role"] == "admin"
     assert payload["username"] == "bob"

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-from services.alert_auth.app.config import get_settings
+from services.alert_auth.infrastructure.config import get_settings
 
 
 class Base(DeclarativeBase):

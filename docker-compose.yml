@@ -37,6 +37,41 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "http://localhost:3000/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
   mock:
     build: .
     command: ["uv", "run", "uvicorn", "app.mock_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
@@ -57,6 +92,8 @@ services:
     environment:
       THIRD_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       THIRD_CONFIG_PATH: /app/config.docker.yaml
+      OTEL_SERVICE_NAME: ingest
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8000:8000"
 
@@ -77,6 +114,8 @@ services:
       TELEMETRY_DATABASE_URL: postgresql+asyncpg://telemetry:telemetry@postgres:5432/telemetry
       TELEMETRY_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       TELEMETRY_REDIS_URL: redis://redis:6379/0
+      OTEL_SERVICE_NAME: telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8010:8010"
 
@@ -85,7 +124,7 @@ services:
     command:
       - sh
       - -c
-      - "uv run alembic -c services/alert_auth/alembic.ini upgrade head && uv run uvicorn services.alert_auth.app.main:app --host 0.0.0.0 --port 8020"
+      - "uv run alembic -c services/alert_auth/alembic.ini upgrade head && uv run uvicorn services.alert_auth.main:app --host 0.0.0.0 --port 8020"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -98,13 +137,22 @@ services:
       ALERTAUTH_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       ALERTAUTH_REDIS_URL: redis://redis:6379/0
       ALERTAUTH_JWT_SECRET: dev-only-secret-key-change-me-in-production-0001
+      OTEL_SERVICE_NAME: alert_auth
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     ports:
       - "8020:8020"
 
   ui:
     build: ./ui
     depends_on:
-      - alert_auth
+      alert_auth:
+        condition: service_started
+      grafana:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      jaeger:
+        condition: service_started
     ports:
       - "3000:80"
 

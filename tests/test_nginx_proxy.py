@@ -105,6 +105,11 @@ class TestJaegerProxy:
         resp = authed_client.get(f"{BASE}/jaeger/")
         assert resp.status_code in (200, 301, 302)
 
+    def test_jaeger_base_href_rewritten(self, authed_client):
+        """Base href must point to /jaeger/ so static assets load correctly."""
+        resp = authed_client.get(f"{BASE}/jaeger/")
+        assert 'href="/jaeger/"' in resp.text
+
 
 class TestLinksPage:
     """The /links page must exist and contain all service links."""

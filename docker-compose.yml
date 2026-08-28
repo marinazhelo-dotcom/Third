@@ -3,7 +3,6 @@ services:
     image: rabbitmq:3-management
     ports:
       - "5672:5672" # for code
-      - "15672:15672" # UI
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_running"]
       interval: 5s

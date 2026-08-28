@@ -1,3 +1,6 @@
+import urllib.parse
+import urllib.request
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
@@ -57,6 +60,44 @@ async def verify_token(request: Request) -> JSONResponse:
     except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
         return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
     return JSONResponse(content={"valid": True})
+
+
+@router.get("/rabbitmq/session")
+async def rabbitmq_session(request: Request) -> JSONResponse:
+    """After verifying JWT, log into RabbitMQ Management as guest and return the session cookie.
+
+    nginx uses this as ``auth_request`` for ``/rabbitmq/`` — the ``Set-Cookie``
+    header is relayed to the client so RabbitMQ UI loads without a second login.
+    """
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else auth
+    if not token:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    try:
+        _get_ts().decode_token(token)
+    except (pyjwt.ExpiredSignatureError, pyjwt.InvalidTokenError):
+        return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+
+    # Log into RabbitMQ Management API as guest.
+    rmq_url = "http://rabbitmq:15672/api/login"
+    body = urllib.parse.urlencode({"username": "guest", "password": "guest"}).encode()
+    req = urllib.request.Request(
+        rmq_url,
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            cookie = resp.headers.get("Set-Cookie", "")
+    except Exception:
+        return JSONResponse(status_code=502, content={"detail": "RabbitMQ login failed"})
+
+    resp = JSONResponse(content={"ok": True})
+    if cookie:
+        # Strip Domain/Path attrs so the cookie applies to /rabbitmq/ via nginx.
+        raw = cookie.split(";")[0]
+        resp.headers["Set-Cookie"] = f"{raw}; Path=/rabbitmq/; SameSite=Lax"
+    return resp
 
 
 @router.post("/auth/register")

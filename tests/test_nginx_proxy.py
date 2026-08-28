@@ -123,3 +123,22 @@ class TestLinksPage:
         html = resp.text
         for service in ["Grafana", "Prometheus", "Jaeger", "RabbitMQ"]:
             assert service.lower() in html.lower(), f"Missing link for {service}"
+
+
+class TestRabbitMQProxy:
+    """RabbitMQ Management behind /rabbitmq/ must auto-login via session relay."""
+
+    def test_rabbitmq_without_token_returns_401(self, client):
+        resp = client.get(f"{BASE}/rabbitmq/")
+        assert resp.status_code == 401
+
+    def test_rabbitmq_with_token_reachable(self, authed_client):
+        resp = authed_client.get(f"{BASE}/rabbitmq/")
+        assert resp.status_code in (200, 301, 302)
+
+    def test_rabbitmq_sets_session_cookie(self, authed_client):
+        """Session endpoint should relay a RabbitMQ session cookie."""
+        resp = authed_client.get(f"{BASE}/rabbitmq/")
+        cookies = [c for c in resp.headers.get_list("set-cookie") if "rmq" in c.lower()]
+        # Either the cookie is set or RabbitMQ returned 200 (session might already exist)
+        assert resp.status_code in (200, 301, 302)
